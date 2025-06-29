@@ -1,9 +1,8 @@
-import crypto from "crypto"; // ✅ for HMAC verification
+import crypto from "crypto";
 import razorpay from "../utils/razorpay.js";
 import AppError from "../utils/error.util.js";
-import User from "../models/user.model.js"; 
-import Payment from "../models/payment.model.js"; 
-
+import User from "../models/user.model.js";
+import Payment from "../models/payment.model.js";
 
 export const getRazorpayApiKey = async (req, res, next) => {
   try {
@@ -22,11 +21,10 @@ export const buySubscription = async (req, res, next) => {
     const { id } = req.user;
     const user = await User.findById(id);
 
-    if (!user) {
-      return next(new AppError("Unauthorized ,please login"));
-    }
+    if (!user) return next(new AppError("Unauthorized, please login"));
+
     if (user.role === "ADMIN") {
-      return next(new AppError("ADMIN cannot purchase a subscription ", 400));
+      return next(new AppError("ADMIN cannot purchase a subscription", 400));
     }
 
     const subscription = await razorpay.subscriptions.create({
@@ -36,12 +34,11 @@ export const buySubscription = async (req, res, next) => {
 
     user.subscription.id = subscription.id;
     user.subscription.status = subscription.status;
-
     await user.save();
 
     res.status(200).json({
-      sucess: true,
-      message: "Subscribed Successfully",
+      success: true,
+      message: "Subscribed successfully",
       subscription_id: subscription.id,
     });
   } catch (e) {
@@ -59,20 +56,19 @@ export const verifySubscription = async (req, res, next) => {
     } = req.body;
 
     const user = await User.findById(id);
+    if (!user) return next(new AppError("Unauthorized, please login"));
 
-    if (!user) {
-      return next(new AppError("Unauthorized,please login"));
-    }
     const subscriptionId = user.subscription.id;
 
     const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_SECRET)
-      .update(`${razorpay_payment_id}| ${subscriptionId}`)
+      .update(`${razorpay_payment_id}|${subscriptionId}`) // 🔧 removed space
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
-      return next(new AppError("Payment not veified, please try again ", 500));
+      return next(new AppError("Payment not verified, please try again", 400));
     }
+
     await Payment.create({
       razorpay_payment_id,
       razorpay_signature,
@@ -83,8 +79,8 @@ export const verifySubscription = async (req, res, next) => {
     await user.save();
 
     res.status(200).json({
-      sucess: true,
-      message: "Payment Verified Successfully!",
+      success: true,
+      message: "Payment verified successfully!",
     });
   } catch (e) {
     return next(new AppError(e.message, 500));
@@ -94,45 +90,43 @@ export const verifySubscription = async (req, res, next) => {
 export const cancelSubscription = async (req, res, next) => {
   try {
     const { id } = req.user;
-
     const user = await User.findById(id);
 
-    if (!user) {
-      return next(new AppError("Unauthorized ,please login"));
-    }
-    if (user.role === "ADMIN") {
-      return next(new AppError("ADMIN cannot purchase a subscription ", 400));
-    }
-    const subscriptionId = user.subscription.id;
+    if (!user) return next(new AppError("Unauthorized, please login"));
 
+    if (user.role === "ADMIN") {
+      return next(new AppError("ADMIN cannot cancel subscription", 400));
+    }
+
+    const subscriptionId = user.subscription.id;
     const subscription = await razorpay.subscriptions.cancel(subscriptionId);
 
     user.subscription.status = subscription.status;
     await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Subscription cancelled successfully",
+    });
   } catch (e) {
     return next(new AppError(e.message, 500));
   }
 };
 
 export const allPayments = async (req, res, next) => {
+  try {
+    const { count } = req.query;
 
-
-    try{
-    const {count} =req.query;
-
-    const subscriptions =await razorpay.subscriptions.all({
-        count:count ||10,
-
+    const subscriptions = await razorpay.subscriptions.all({
+      count: count || 10,
     });
 
     res.status(200).json({
-        success:true,
-        message:'All payments',
-        subscriptions
-    })
-    }catch(e){
-   return next(new AppError(e.message, 500));
-    }
-    
+      success: true,
+      message: "All payments fetched successfully",
+      subscriptions,
+    });
+  } catch (e) {
+    return next(new AppError(e.message, 500));
+  }
 };
-

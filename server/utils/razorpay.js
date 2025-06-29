@@ -1,7 +1,7 @@
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
 dotenv.config(); // This MUST come before anything else!
 
-import Razorpay from "razorpay";
+import Razorpay from 'razorpay';
 
 console.log("KEY_ID:", process.env.RAZORPAY_KEY_ID); // Debug
 console.log("SECRET:", process.env.RAZORPAY_SECRET); // Debug

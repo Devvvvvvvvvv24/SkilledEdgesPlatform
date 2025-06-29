@@ -1,18 +1,19 @@
 import mongoose from "mongoose";
 
-mongoose.set('strictQuery',false);//not in strict mode if ask extra info ask dont send error
+mongoose.set("strictQuery", false); // Allow flexible queries
 
-const connectionToDB=async ()=>{
-    try{
-        const {connection}=await mongoose.connect(process.env.MONGO_URI|| `mongodb://127.0.0.1:27017/lms`);
-        if(connection){
-          console.log(`Connected to MongoDB: ${connection.host}`);
-        }
-    }catch(e){
-        console.log(e);
-        process.exit(1);//terminate karjao agar database connect nhi to no use
-    }
-  
-}
+const connectionToDB = async () => {
+  try {
+    const mongoUri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/lms";
+
+    // Remove deprecated options (useNewUrlParser and useUnifiedTopology)
+    const conn = await mongoose.connect(mongoUri);
+
+    console.log(`✅ Connected to MongoDB: ${conn.connection.host}`);
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err);
+    process.exit(1); // Exit process if DB connection fails
+  }
+};
 
 export default connectionToDB;

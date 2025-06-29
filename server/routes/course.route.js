@@ -1,35 +1,50 @@
-import {Router} from 'express';
-import { addLecturesToCourseById, createCourse, getAllCourses, getLecturesByCourseId, removeCourse, updateCourse } from '../controllers/course.controller.js';
-import { authorizedRoles, isLoggedIn } from '../middlewares/auth.middleware.js';
+import { Router } from 'express';
+import {
+  addLecturesToCourseById,
+  createCourse,
+  getAllCourses,
+  getLecturesByCourseId,
+  removeCourse,
+  updateCourse
+} from '../controllers/course.controller.js';
+
+import {
+  authorizedRoles,
+  authorizeSubscriber,
+  isLoggedIn
+} from '../middlewares/auth.middleware.js';
+
 import upload from '../middlewares/multer.middleware.js';
 
-const router=Router();
+const router = Router();
 
+// Get all courses or create a new one (ADMIN only)
 router.route('/')
-   .get(getAllCourses)//in the same route we can add multiple methods that we can called
-   .post(
+  .get(getAllCourses)
+  .post(
     isLoggedIn,
-    authorizedRoles('ADMIN'),  //CHECKS FOR AUTHORIZATION
-    upload.single('thumbnail'), //IMAGE UPLOAD OR TRANSITION
+    authorizedRoles('ADMIN'),
+    upload.single('thumbnail'),
     createCourse
-);
+  );
 
-
-
-// router.get('./:id',getLecturesByCourseId);
+// Course-specific operations by ID
 router.route('/:id')
-.get(isLoggedIn ,getLecturesByCourseId)
-.put(isLoggedIn,
+  // Get lectures (only if subscribed)
+  .get(isLoggedIn, authorizeSubscriber, getLecturesByCourseId)
+
+  // Update course (ADMIN only)
+  .put(isLoggedIn, authorizedRoles('ADMIN'), updateCourse)
+
+  // Delete course (ADMIN only)
+  .delete(isLoggedIn, authorizedRoles('ADMIN'), removeCourse)
+
+  // Add a lecture to course (ADMIN only)
+  .post(
+    isLoggedIn,
     authorizedRoles('ADMIN'),
-    updateCourse)
-.delete(isLoggedIn,
-    authorizedRoles('ADMIN'),
-    removeCourse)  //middleware looged in use
-    .post(isLoggedIn,
-        authorizedRoles('ADMIN'),
-        upload.single('lecture'),
-        addLecturesToCourseById
-    );
+    upload.single('lecture'),
+    addLecturesToCourseById
+  );
 
 export default router;
-

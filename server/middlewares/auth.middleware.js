@@ -1,34 +1,49 @@
-import { assign } from "nodemailer/lib/shared/index.js";
 import AppError from "../utils/error.util.js";
 import jwt from "jsonwebtoken";
+
+// ✅ Middleware to check if the user is authenticated
 const isLoggedIn = async (req, res, next) => {
-  const { token } = req.cookie;
+  const { token } = req.cookies; // ✅ Corrected: req.cookies, not req.cookie
+
   if (!token) {
-    return next(new AppError("UnAuthenticated, please login again", 40));
+    return next(new AppError("Unauthenticated, please login again", 401));
   }
-  const userDetails = await jwt.verify(token, process.env.JWT_SECRET);
-  req.user = userDetails;
-  next();
+
+  try {
+    const userDetails = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = userDetails;
+    next();
+  } catch (err) {
+    return next(new AppError("Invalid or expired token", 401));
+  }
 };
 
+// ✅ Middleware to check if user has required roles
 const authorizedRoles =
   (...roles) =>
-  async (req, res, next) => {
-    const currentUserRole = req.user.role;
-    if (roles.includes(currentUserRole)) {
+  (req, res, next) => {
+    const currentUserRole = req.user?.role;
+
+    if (!roles.includes(currentUserRole)) {
       return next(
-        new AppError("You dont have permission to access this route", 400)
+        new AppError("You don't have permission to access this route", 403)
       );
     }
+
     next();
   };
 
-const authorizeSubscriber = async (req, res, next) => {
-  const subscription = req.user.subscription;
-  const currentUserRole = req.user.role;
-  if (currentUserRole !== "ADMIN" && subscription.status !== "active") {
-    return next(new AppError("Please subscribe to access this route!", 403));
+// ✅ Middleware to check if user is subscribed (except for ADMIN)
+const authorizeSubscriber = (req, res, next) => {
+  const { role, subscription } = req.user;
+
+  if (role !== "ADMIN" && subscription?.status !== "active") {
+    return next(
+      new AppError("Please subscribe to access this route!", 403)
+    );
   }
+
   next();
 };
+
 export { isLoggedIn, authorizedRoles, authorizeSubscriber };

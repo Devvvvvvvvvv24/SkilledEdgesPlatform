@@ -3,12 +3,16 @@ import AppError from "../utils/error.util.js";
 import cloudinary from "cloudinary";
 import fs from "fs/promises";
 import crypto from "crypto";
+import { v4 as uuidv4 } from 'uuid';
+import path from "path";
 import sendEmail from "../utils/email.util.js";
+import { v4 as uuid } from "uuid";
 
 const cookieOption = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   httpOnly: true,
-  secure: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict",
 };
 
 const register = async (req, res, next) => {
@@ -29,35 +33,32 @@ const register = async (req, res, next) => {
       email,
       password,
       avatar: {
-        public_id: email, // Default avatar setup, will be updated if image uploaded
+        public_id: uuid(),
         secure_url: '',
       },
     });
 
     if (req.file) {
-      // Upload the avatar image to cloud storage (e.g., Cloudinary)
       try {
         const result = await cloudinary.v2.uploader.upload(req.file.path, {
-          folder: "users", // Customize folder name as needed
+          folder: "users",
           width: 250,
           height: 250,
           gravity: "faces",
           crop: "fill",
         });
 
-        // Update the user's avatar with the uploaded image URL
         user.avatar.public_id = result.public_id;
         user.avatar.secure_url = result.secure_url;
 
-        // Remove the local file after upload
-        await fs.rm(`uploads/${req.file.filename}`);
+        await fs.rm(path.resolve(`uploads/${req.file.filename}`));
       } catch (err) {
         return next(new AppError("Avatar upload failed", 500));
       }
     }
 
     await user.save();
-    user.password = undefined; // Don't send password in the response
+    user.password = undefined;
 
     res.status(201).json({
       success: true,
@@ -100,9 +101,10 @@ const login = async (req, res, next) => {
 
 const logout = (req, res) => {
   res.cookie("token", null, {
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     maxAge: 0,
     httpOnly: true,
+    sameSite: "strict",
   });
 
   res.status(200).json({
@@ -143,11 +145,7 @@ const forgotPassword = async (req, res, next) => {
 
     const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
     const subject = "Reset Password";
-    const message = `
-      You can reset your password by clicking <a href="${resetURL}" target="_blank">Reset Your Password</a><br>
-      If the above link does not work, copy-paste this link in a new tab: ${resetURL}.
-      If you did not request this, kindly ignore.
-    `;
+    const message = `You can reset your password by clicking <a href="${resetURL}" target="_blank">Reset Your Password</a><br>If the above link does not work, copy and paste this in a new tab: ${resetURL}. If you did not request this, please ignore.`;
 
     await sendEmail(email, subject, message);
 
@@ -156,7 +154,6 @@ const forgotPassword = async (req, res, next) => {
       message: `Reset password token sent to ${email}.`,
     });
   } catch (err) {
-    if (err instanceof AppError) return next(err);
     await User.updateOne(
       { email: req.body.email },
       { $unset: { forgotPasswordToken: "", forgotPasswordExpiry: "" } }
@@ -170,10 +167,7 @@ const resetPassword = async (req, res, next) => {
     const { resetToken } = req.params;
     const { password } = req.body;
 
-    const hashedToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
+    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
 
     const user = await User.findOne({
       forgotPasswordToken: hashedToken,
@@ -215,7 +209,6 @@ const changePassword = async (req, res, next) => {
 
     user.password = newPassword;
     await user.save();
-
     user.password = undefined;
 
     res.status(200).json({
@@ -239,20 +232,24 @@ const updateUser = async (req, res, next) => {
     if (fullName) user.fullName = fullName;
 
     if (req.file) {
-      await cloudinary.v2.uploader.destroy(user.avatar.public_id);
+      try {
+        await cloudinary.v2.uploader.destroy(user.avatar.public_id);
 
-      const result = await cloudinary.v2.uploader.upload(req.file.path, {
-        folder: "lms",
-        width: 250,
-        height: 250,
-        gravity: "faces",
-        crop: "fill",
-      });
+        const result = await cloudinary.v2.uploader.upload(req.file.path, {
+          folder: "users",
+          width: 250,
+          height: 250,
+          gravity: "faces",
+          crop: "fill",
+        });
 
-      user.avatar.public_id = result.public_id;
-      user.avatar.secure_url = result.secure_url;
+        user.avatar.public_id = result.public_id;
+        user.avatar.secure_url = result.secure_url;
 
-      await fs.rm(`uploads/${req.file.filename}`);
+        await fs.rm(path.resolve(`uploads/${req.file.filename}`));
+      } catch (err) {
+        return next(new AppError("Failed to upload avatar", 500));
+      }
     }
 
     await user.save();
